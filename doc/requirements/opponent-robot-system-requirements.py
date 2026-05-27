@@ -46,7 +46,7 @@ def _(mo):
 
     <h3>Modes of Operation</h3>
     <ul>
-      <li>Command Mode: Open palm → Position adjustment.</li>
+      <li>Follow Mode: Open palm → Position adjustment.</li>
       <li>Park Mode: Two fingers → Lateral movement.</li>
       <li>Fight Mode: Two fists → Dynamic tracking & evasion.</li>
       <li>Stop Mode: Palm down → Immediate halt.</li>

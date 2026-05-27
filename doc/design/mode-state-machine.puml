@@ -2,27 +2,28 @@
 title opponent robot state machine
 
 ' states
-state Command 
+state Follow 
 state Park 
 state Fight
 state Stop 
 
 ' relationships
-[*] --> Command
+[*] -d-> Stop
 
-Command --> Park : gesture=point_left or point_right
-Command --> Fight : gesture=two_fists
-Command --> Stop : gesture=palm_down
+Stop -l-> Park : gesture=point_left or point_right
+Stop -r-> Fight : gesture=two_fists
+Stop -d-> Follow : gesture=open_hand
 
-Park -u-> Command : gesture=open_hand
-Park -r-> Fight : gesture=two_fists
-Park -d-> Stop : gesture=palm_down
+Follow --> Park : gesture=point_left or point_right
+Follow --> Fight : gesture=two_fists
+Follow --> Stop : gesture=palm_down
 
-Fight -l-> Park : gesture=point_left or point_right
-Fight -u-> Command : gesture=open_hand
-Fight -d-> Stop : gesture=palm_down
+Park --> Follow : gesture=open_hand
+Park --> Fight : gesture=two_fists
+Park --> Stop : gesture=palm_down
 
-Stop --> Park : gesture=point_left or point_right
-Stop --> Fight : gesture=two_fists
-Stop -u-> Command : gesture=open_hand
+Fight --> Park : gesture=point_left or point_right
+Fight --> Follow : gesture=open_hand
+Fight --> Stop : gesture=palm_down
+
 @enduml

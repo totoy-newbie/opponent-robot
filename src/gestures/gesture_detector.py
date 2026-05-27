@@ -4,7 +4,7 @@ This module provides `GestureDetector` with a lightweight API:
 - `process(landmarks)` -> returns a detected gesture string or `None`.
 
 Detected gestures:
-- 'command' (open palm, all fingers extended)
+- 'follow' (open palm, all fingers extended)
 - 'stop' (palm down, fist)
 - 'fight' (two fists)
 - 'park_left' (point left with index finger)
@@ -148,9 +148,9 @@ class GestureDetector:
         if len(hands) >= 1:
             h0 = hands[0]
             
-            # Open palm (4+ fingers) -> command mode
+            # Open palm (4+ fingers) -> follow mode
             if h0['fingers'] >= 4:
-                return 'command'
+                return 'follow'
             
             # Closed fist (0 fingers) -> stop mode
             if h0['fingers'] == 0:

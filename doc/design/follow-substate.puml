@@ -1,5 +1,5 @@
 @startuml
-title command substate
+title follow substate
 
 ' states
 Follow: maintain distance to person

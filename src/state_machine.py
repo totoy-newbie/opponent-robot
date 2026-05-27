@@ -1,12 +1,12 @@
 """Hierarchical state machine for managing gesture-to-mode transitions with validation delay.
 
 This module implements the opponent robot's state machine with:
-- Main modes: Command, Park, Fight, Stop
-- Sub-states for each mode (e.g., Command → Follow/Forward/Left/Right/Back)
+- Main modes: Follow, Park, Fight, Stop
+- Sub-states for each mode (e.g., Follow → Follow/Forward/Left/Right/Back)
 - Gesture-triggered transitions as defined in doc/design/*.puml
 
 State hierarchy:
-├─ Command (Follow, Forward, Left, Right, Back)
+├─ Follow (Follow, Forward, Left, Right, Back)
 ├─ Park (ParkLeft, ParkRight, Spotlight)
 ├─ Fight (Tracking, Evasion)
 └─ Stop (Halt)
@@ -18,14 +18,14 @@ from enum import Enum
 
 class MainMode(Enum):
     """Main operational modes."""
-    COMMAND = "Command"
+    FOLLOW = "Follow"
     PARK = "Park"
     FIGHT = "Fight"
     STOP = "Stop"
 
 
 class CommandSubstate(Enum):
-    """Command mode sub-states."""
+    """Follow mode sub-states."""
     FOLLOW = "Follow"
     FORWARD = "Forward"
     LEFT = "Left"
@@ -59,7 +59,7 @@ class RobotStateMachine:
 
     # Gesture to main mode mapping
     GESTURE_TO_MAIN_MODE = {
-        'command': MainMode.COMMAND,
+        'follow': MainMode.FOLLOW,
         'stop': MainMode.STOP,
         'fight': MainMode.FIGHT,
         'park_left': MainMode.PARK,
@@ -80,7 +80,7 @@ class RobotStateMachine:
         self.pending_mode: Optional[MainMode] = None
         
         # Main mode state
-        self.main_mode: MainMode = MainMode.COMMAND
+        self.main_mode: MainMode = MainMode.FOLLOW
         
         # Sub-state tracking for each mode
         self.command_substate: CommandSubstate = CommandSubstate.FOLLOW
@@ -96,7 +96,7 @@ class RobotStateMachine:
 
         Returns:
             Dict with state information:
-            - 'main_mode': Current main mode (Command/Park/Fight/Stop)
+            - 'main_mode': Current main mode (Follow/Park/Fight/Stop)
             - 'substate': Current sub-state of the main mode
             - 'gesture': Current detected gesture
             - 'validation_progress': Percentage of validation time elapsed (0-100)
@@ -125,7 +125,7 @@ class RobotStateMachine:
         """Transition to a new main mode based on gesture."""
         self.main_mode = new_mode
 
-        if new_mode == MainMode.COMMAND:
+        if new_mode == MainMode.FOLLOW:
             self.command_substate = CommandSubstate.FOLLOW
         elif new_mode == MainMode.PARK:
             # Initialize park substate based on pointing direction
@@ -141,7 +141,7 @@ class RobotStateMachine:
     def _get_state(self) -> dict:
         """Get current full state."""
         # Determine current substate based on main mode
-        if self.main_mode == MainMode.COMMAND:
+        if self.main_mode == MainMode.FOLLOW:
             current_substate = self.command_substate.value
         elif self.main_mode == MainMode.PARK:
             current_substate = self.park_substate.value
@@ -174,7 +174,7 @@ class RobotStateMachine:
         self.current_gesture = None
         self.gesture_start_time = None
         self.pending_mode = None
-        self.main_mode = MainMode.COMMAND
+        self.main_mode = MainMode.FOLLOW
         self.command_substate = CommandSubstate.FOLLOW
         self.park_substate = ParkSubstate.PARK_LEFT
         self.fight_substate = FightSubstate.TRACKING
