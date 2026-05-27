@@ -1,0 +1,12 @@
+@startuml
+title fight substate
+
+' states
+Tracking : follow target
+Evasion : evade obstacle
+
+' relationships
+[*] --> Tracking
+Tracking --> Evasion : obstacle_detected
+Evasion --> Tracking : obstacle_clear
+@enduml

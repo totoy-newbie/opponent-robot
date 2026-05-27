@@ -1,0 +1,9 @@
+@startuml
+title stop substate
+
+' states
+Halt : motors off
+
+' relationships
+[*] --> Halt
+@enduml

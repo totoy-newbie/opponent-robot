@@ -1,0 +1,21 @@
+@startuml
+title command substate
+
+' states
+Follow: maintain distance to person
+Forward : move forward
+Left : move left
+Right : move right
+Back : move back
+
+' relationships
+[*] --> Follow
+Follow -u-> Left : gesture=swipe_left
+Follow -u-> Right : gesture=swipe_right
+Follow -d-> Back : gesture=swipe_up
+Follow -d-> Forward : gesture=swipe_down
+Left --> Follow : gesture=close_fist
+Right --> Follow : gesture=close_fist
+Back --> Follow : gesture=close_fist
+Forward --> Follow : gesture=close_fist
+@enduml

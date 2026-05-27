@@ -1,0 +1,28 @@
+@startuml
+title opponent robot state machine
+
+' states
+state Command 
+state Park 
+state Fight
+state Stop 
+
+' relationships
+[*] --> Command
+
+Command --> Park : gesture=point_left or point_right
+Command --> Fight : gesture=two_fists
+Command --> Stop : gesture=palm_down
+
+Park -u-> Command : gesture=open_hand
+Park -r-> Fight : gesture=two_fists
+Park -d-> Stop : gesture=palm_down
+
+Fight -l-> Park : gesture=point_left or point_right
+Fight -u-> Command : gesture=open_hand
+Fight -d-> Stop : gesture=palm_down
+
+Stop --> Park : gesture=point_left or point_right
+Stop --> Fight : gesture=two_fists
+Stop -u-> Command : gesture=open_hand
+@enduml

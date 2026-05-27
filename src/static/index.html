@@ -1,0 +1,145 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Opponent Robot — Video</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        background-color: #1e1e1e;
+        color: #fff;
+        padding: 20px;
+      }
+      h1 {
+        margin: 0 0 20px 0;
+      }
+      #video {
+        background: #000;
+        border: 2px solid #00ff00;
+        margin-bottom: 20px;
+      }
+      .gesture-display {
+        display: flex;
+        gap: 40px;
+        justify-content: center;
+        font-size: 24px;
+      }
+      .gesture-box, .mode-box {
+        padding: 15px 30px;
+        border: 2px solid #00ff00;
+        border-radius: 8px;
+        background-color: #0a0a0a;
+        min-width: 200px;
+        text-align: center;
+      }
+      .gesture-box {
+        border-color: #00ff00;
+      }
+      .mode-box {
+        border-color: #ffff00;
+      }
+      .mode-box.active {
+        background-color: #1a1a00;
+        font-weight: bold;
+        color: #ffff00;
+      }
+      .label {
+        font-size: 14px;
+        color: #888;
+        margin-bottom: 5px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Opponent Robot — WebRTC Stream</h1>
+    <video id="video" autoplay playsinline controls style="width:640px;height:480px;"></video>
+    
+    <div class="gesture-display">
+      <div class="gesture-box">
+        <div class="label">Detected Gesture</div>
+        <div id="gestureDisplay">-</div>
+      </div>
+      <div class="mode-box">
+        <div class="label">Confirmed Mode</div>
+        <div id="modeDisplay">-</div>
+      </div>
+    </div>
+
+    <script>
+      let gestureUpdateInterval = null;
+
+      async function start() {
+        const pc = new RTCPeerConnection();
+        const videoEl = document.getElementById('video');
+
+        pc.ontrack = (event) => {
+          videoEl.srcObject = event.streams[0];
+        };
+
+        // Add video transceiver for receive-only
+        pc.addTransceiver('video', { direction: 'recvonly' });
+
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+
+        const resp = await fetch('/offer', {
+          method: 'POST',
+          body: JSON.stringify({ sdp: offer.sdp, type: offer.type }),
+          headers: { 'Content-Type': 'application/json' }
+        });
+        const answer = await resp.json();
+        await pc.setRemoteDescription(answer);
+
+        // Start polling for gesture updates
+        startGesturePolling();
+      }
+
+      async function updateGestureDisplay() {
+        try {
+          const resp = await fetch('/gesture');
+          const data = await resp.json();
+
+          const gestureEl = document.getElementById('gestureDisplay');
+          const modeEl = document.getElementById('modeDisplay');
+          const modeBox = modeEl.parentElement;
+
+          if (data.gesture) {
+            gestureEl.textContent = data.gesture;
+          } else {
+            gestureEl.textContent = '-';
+          }
+
+          if (data.mode) {
+            modeEl.textContent = data.mode;
+            modeBox.classList.add('active');
+          } else {
+            modeEl.textContent = '-';
+            modeBox.classList.remove('active');
+          }
+        } catch (err) {
+          console.error('Error fetching gesture:', err);
+        }
+      }
+
+      function startGesturePolling() {
+        // Poll every 100ms for gesture updates
+        if (gestureUpdateInterval) {
+          clearInterval(gestureUpdateInterval);
+        }
+        gestureUpdateInterval = setInterval(updateGestureDisplay, 100);
+      }
+
+      start().catch(console.error);
+
+      // Stop polling when page unloads
+      window.addEventListener('beforeunload', () => {
+        if (gestureUpdateInterval) {
+          clearInterval(gestureUpdateInterval);
+        }
+      });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,14 @@
+@startuml
+title park substate
+
+' states
+ParkLeft : lateral move left
+ParkRight : lateral move right
+Spotlight: track person
+
+' relationships
+[*] --> ParkLeft: pointing left
+[*] --> ParkRight: pointing right
+ParkLeft --> Spotlight: obstacle_detected \n or max_distance
+ParkRight --> Spotlight: obstacle_detected \n or max_distance
+@enduml
