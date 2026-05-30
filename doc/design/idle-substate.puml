@@ -1,5 +1,5 @@
 @startuml
-title stop substate
+title idle substate
 
 ' states
 Halt : motors off

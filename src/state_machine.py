@@ -1,7 +1,7 @@
 """Hierarchical state machine for managing gesture-to-mode transitions with validation delay.
 
 This module implements the opponent robot's state machine with:
-- Main modes: Command, Park, Fight, Stop
+- Main modes: Command, Park, Fight, Idle
 - Sub-states for each mode (e.g., Command → Command/Forward/Left/Right/Back)
 - Gesture-triggered transitions as defined in doc/design/*.puml
 
@@ -9,7 +9,7 @@ State hierarchy:
 ├─ Command (Follow, Forward, Left, Right, Back)
 ├─ Park (ParkLeft, ParkRight, Spotlight)
 ├─ Fight (Tracking, Evasion)
-└─ Stop (Halt)
+└─ Idle (Halt)
 """
 import time
 from typing import Optional
@@ -21,7 +21,7 @@ class MainMode(Enum):
     COMMAND = "Command"
     PARK = "Park"
     FIGHT = "Fight"
-    STOP = "Stop"
+    IDLE = "Idle"
 
 
 class CommandSubstate(Enum):
@@ -46,8 +46,8 @@ class FightSubstate(Enum):
     EVASION = "Evasion"
 
 
-class StopSubstate(Enum):
-    """Stop mode sub-states."""
+class IdleSubstate(Enum):
+    """Idle mode sub-states."""
     HALT = "Halt"
 
 
@@ -59,8 +59,8 @@ class RobotStateMachine:
 
     # Gesture to main mode mapping
     GESTURE_TO_MAIN_MODE = {
-        'follow': MainMode.COMMAND,
-        'stop': MainMode.STOP,
+        'open_palm': MainMode.COMMAND,
+        'fist': MainMode.IDLE,
         'fight': MainMode.FIGHT,
         'park_left': MainMode.PARK,
         'park_right': MainMode.PARK,
@@ -72,15 +72,11 @@ class RobotStateMachine:
     }
 
     COMMAND_SUBSTATE_GESTURES = {
-        'follow': CommandSubstate.FOLLOW,
+        'open_palm': CommandSubstate.FOLLOW,
         'left': CommandSubstate.LEFT,
         'right': CommandSubstate.RIGHT,
         'back': CommandSubstate.BACK,
         'forward': CommandSubstate.FORWARD,
-        'swipe_left': CommandSubstate.LEFT,
-        'swipe_right': CommandSubstate.RIGHT,
-        'swipe_up': CommandSubstate.BACK,
-        'swipe_down': CommandSubstate.FORWARD,
     }
 
     def __init__(self, validation_delay: float = 1.5):
@@ -92,7 +88,7 @@ class RobotStateMachine:
         self.validation_delay = validation_delay
         # Gestures that should immediately switch main mode without waiting
         # for the validation_delay when detected (useful for responsive control)
-        self.immediate_main_gestures = {'follow'}
+        self.immediate_main_gestures = {'open_palm'}
         
         # Gesture tracking
         self.current_gesture: Optional[str] = None
@@ -106,7 +102,7 @@ class RobotStateMachine:
         self.command_substate: CommandSubstate = CommandSubstate.FOLLOW
         self.park_substate: ParkSubstate = ParkSubstate.PARK_LEFT
         self.fight_substate: FightSubstate = FightSubstate.TRACKING
-        self.stop_substate: StopSubstate = StopSubstate.HALT
+        self.stop_substate: IdleSubstate = IdleSubstate.HALT
 
     def update(self, detected_gesture: Optional[str]) -> dict:
         """Update state machine with a newly detected gesture.
@@ -116,7 +112,7 @@ class RobotStateMachine:
 
         Returns:
             Dict with state information:
-            - 'main_mode': Current main mode (Command/Park/Fight/Stop)
+            - 'main_mode': Current main mode (Command/Park/Fight/Idle)
             - 'substate': Current sub-state of the main mode
             - 'gesture': Current detected gesture
             - 'validation_progress': Percentage of validation time elapsed (0-100)
@@ -160,9 +156,7 @@ class RobotStateMachine:
             self.command_substate = self.COMMAND_SUBSTATE_GESTURES[detected_gesture]
         if self.main_mode == MainMode.PARK and detected_gesture in self.PARK_SUBSTATE_GESTURES:
             self.park_substate = self.PARK_SUBSTATE_GESTURES[detected_gesture]
-        # Note: 'stop' maps to a main mode and was handled above; do not treat
-        # it as a follow-substate gesture here.
-
+ 
         return self._get_state()
 
     def _transition_to_mode(self, new_mode: MainMode, gesture: str):
@@ -177,8 +171,8 @@ class RobotStateMachine:
             self.park_substate = ParkSubstate.PARK_LEFT
         elif new_mode == MainMode.FIGHT:
             self.fight_substate = FightSubstate.TRACKING
-        elif new_mode == MainMode.STOP:
-            self.stop_substate = StopSubstate.HALT
+        elif new_mode == MainMode.IDLE:
+            self.stop_substate = IdleSubstate.HALT
 
     def _get_state(self) -> dict:
         """Get current full state."""
@@ -189,7 +183,7 @@ class RobotStateMachine:
             current_substate = self.park_substate.value
         elif self.main_mode == MainMode.FIGHT:
             current_substate = self.fight_substate.value
-        elif self.main_mode == MainMode.STOP:
+        elif self.main_mode == MainMode.IDLE:
             current_substate = self.stop_substate.value
         else:
             current_substate = "Unknown"
@@ -220,4 +214,4 @@ class RobotStateMachine:
         self.command_substate = CommandSubstate.FOLLOW
         self.park_substate = ParkSubstate.PARK_LEFT
         self.fight_substate = FightSubstate.TRACKING
-        self.stop_substate = StopSubstate.HALT
+        self.stop_substate = IdleSubstate.HALT

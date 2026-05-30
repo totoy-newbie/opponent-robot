@@ -1,5 +1,5 @@
-class StopSubstate:
-    """Stop substate representing a halted motor state."""
+class IdleSubstate:
+    """Idle substate representing a halted motor state."""
 
     DEFAULT = "Halt"
 

@@ -4,9 +4,9 @@ This module provides `GestureDetector` with a lightweight API:
 - `process(landmarks)` -> returns a detected gesture string or `None`.
 
 Detected gestures:
-- 'follow' (open palm at or near the saved center position)
+- 'open_palm' (open palm at or near the saved center position)
 - 'left', 'right', 'forward', 'back' (open palm moved away from follow center)
-- 'stop' (palm down, fist)
+- 'fist' (fist)
 - 'fight' (two fists)
 - 'park_left' (point left with index finger)
 - 'park_right' (point right with index finger)
@@ -109,13 +109,13 @@ class GestureDetector:
         """Detect follow substate directions relative to the saved palm center."""
         if self.follow_center is None:
             self.follow_center = centroid
-            return 'follow'
+            return 'open_palm'
 
         dx = centroid[0] - self.follow_center[0]
         dy = centroid[1] - self.follow_center[1]
 
         if abs(dx) < self.follow_threshold and abs(dy) < self.follow_threshold:
-            return 'follow'
+            return 'open_palm'
 
         if abs(dx) > abs(dy):
             return 'right' if dx > 0 else 'left'
@@ -179,7 +179,7 @@ class GestureDetector:
             # Closed fist (0 fingers) -> stop mode
             if h0['fingers'] == 0:
                 self.follow_center = None
-                return 'stop'
+                return 'fist'
             
             # Pointing (1 finger) -> park mode (left or right)
             pointing = self._detect_pointing(hand_landmarks_list, 0, h0['is_right'])

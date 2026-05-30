@@ -49,7 +49,7 @@ def _(mo):
       <li>Command Mode: Open palm → Position adjustment.</li>
       <li>Park Mode: Two fingers → Lateral movement.</li>
       <li>Fight Mode: Two fists → Dynamic tracking & evasion.</li>
-      <li>Stop Mode: Palm down → Immediate halt.</li>
+      <li>Idle Mode: Palm down → Immediate halt.</li>
     </ul>
 
     <h3>Gesture Recognition</h3>

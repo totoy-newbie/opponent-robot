@@ -185,7 +185,7 @@ class OpenCVMediaTrack(VideoStreamTrack):
         if prev_sub in directional and new_sub == 'Follow':
             self.gesture_detector.reset_follow_center()
         # If we left Follow mode, clear the center so an open palm in another
-        # mode is recognized as the main 'follow' gesture (not a substate).
+        # mode is recognized as the main 'open_palm' gesture (not a substate).
         if prev_main == 'Command' and new_main != 'Command':
             self.gesture_detector.reset_follow_center()
 
