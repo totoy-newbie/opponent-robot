@@ -60,7 +60,7 @@ class RobotStateMachine:
     # Gesture to main mode mapping
     GESTURE_TO_MAIN_MODE = {
         'open_palm': MainMode.COMMAND,
-        'fist': MainMode.IDLE,
+        'palm_down': MainMode.IDLE,
         'fight': MainMode.FIGHT,
         'park_left': MainMode.PARK,
         'park_right': MainMode.PARK,

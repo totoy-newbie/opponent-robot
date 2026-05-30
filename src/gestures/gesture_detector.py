@@ -4,7 +4,8 @@ This module provides `GestureDetector` with a lightweight API:
 - `process(landmarks)` -> returns a detected gesture string or `None`.
 
 Detected gestures:
-- 'open_palm' (open palm at or near the saved center position)
+- 'open_palm' (open palm facing camera at or near the saved center position)
+- 'palm_down' (open palm facing downward)
 - 'left', 'right', 'forward', 'back' (open palm moved away from follow center)
 - 'fist' (fist)
 - 'fight' (two fists)
@@ -22,23 +23,14 @@ from typing import Optional, List, Any
 
 class GestureDetector:
     def __init__(self, max_history=5, motion_thresh=0.05):
-        """Initialize the gesture detector.
-        
-        Args:
-            max_history: Number of frames to track for motion-based gestures
-            motion_thresh: Minimum centroid movement to consider a swipe
-        """
+        """Initialize the gesture detector."""
         self.history = deque(maxlen=max_history)
         self.motion_thresh = motion_thresh
         self.follow_center = None
         self.follow_threshold = 0.08
 
     def _count_fingers(self, hand_landmarks_list: List[Any], hand_idx: int, is_right: bool) -> int:
-        """Count extended fingers in a hand.
-        
-        Indices of finger tips: 4 (thumb), 8 (index), 12 (middle), 16 (ring), 20 (pinky).
-        Each tip is compared to the PIP (proximal interphalangeal) joint below it.
-        """
+        """Count extended fingers in a hand."""
         tips_ids = [4, 8, 12, 16, 20]
         count = 0
         hand_lm = hand_landmarks_list[hand_idx]
@@ -68,42 +60,19 @@ class GestureDetector:
         return (sum(xs) / len(xs), sum(ys) / len(ys))
 
     def _detect_pointing(self, hand_landmarks_list: List[Any], hand_idx: int, is_right: bool) -> Optional[str]:
-        """Detect if hand is pointing left or right (only index finger extended).
-        
-        Uses the vector from hand center (middle finger MCP) to index finger tip
-        to determine pointing direction. The hand must have only the index finger
-        extended for this to register as a valid pointing gesture.
-        """
+        """Detect if hand is pointing left or right (only index finger extended)."""
         finger_count = self._count_fingers(hand_landmarks_list, hand_idx, is_right)
-        
-        # Check if only index finger is extended (count == 1)
         if finger_count != 1:
             return None
         
         hand_lm = hand_landmarks_list[hand_idx]
-        
-        # Use middle finger MCP (landmark 9) as hand center for better reference
         hand_center_x = hand_lm[9].x
-        hand_center_y = hand_lm[9].y
-        
-        # Index finger tip (landmark 8) position
         index_tip_x = hand_lm[8].x
-        index_tip_y = hand_lm[8].y
-        
-        # Calculate the vector from hand center to index finger tip
         dx = index_tip_x - hand_center_x
-        dy = index_tip_y - hand_center_y
         
-        # Require significant horizontal component (> 0.05 normalized units)
-        # to avoid false positives from minor position variations
         if abs(dx) < 0.05:
             return None
-        
-        # Pointing left if index tip is to the left of hand center, right otherwise
-        if dx < 0:
-            return 'park_left'
-        else:
-            return 'park_right'
+        return 'park_left' if dx < 0 else 'park_right'
 
     def _detect_follow_direction(self, centroid: tuple) -> str:
         """Detect follow substate directions relative to the saved palm center."""
@@ -119,25 +88,29 @@ class GestureDetector:
 
         if abs(dx) > abs(dy):
             return 'right' if dx > 0 else 'left'
-        # Reverse vertical mapping: palm down (dy>0) -> 'forward', palm up -> 'back'
         return 'forward' if dy > 0 else 'back'
+
+    def _detect_palm_orientation(self, hand_landmarks_list: List[Any], hand_idx: int) -> Optional[str]:
+        """Distinguish open palm (facing camera) vs palm down (facing ground)."""
+        hand_lm = hand_landmarks_list[hand_idx]
+        wrist_z = hand_lm[0].z
+        fingertip_ids = [8, 12, 16, 20]
+        avg_tip_z = sum(hand_lm[i].z for i in fingertip_ids if i < len(hand_lm)) / len(fingertip_ids)
+
+        # Open palm: fingertips closer to camera than wrist
+        if avg_tip_z < wrist_z - 0.02:
+            return 'open_palm'
+        # Palm down: fingertips farther than wrist
+        elif avg_tip_z > wrist_z + 0.02:
+            return 'palm_down'
+        return None
 
     def reset_follow_center(self):
         """Reset the follow center so the next open palm reinitializes it."""
         self.follow_center = None
 
     def process(self, hand_landmarks_list: List[Any], handedness_list: List[str]) -> Optional[str]:
-        """Process hand landmarks and return a detected gesture.
-
-        Args:
-            hand_landmarks_list: List of hand landmark objects from MediaPipe
-            handedness_list: List of handedness strings ('Left' or 'Right')
-
-        Returns:
-            Gesture string or None if no clear gesture detected.
-        """
-        detected = None
-        
+        """Process hand landmarks and return a detected gesture."""
         if not hand_landmarks_list:
             self.history.append(None)
             return None
@@ -154,36 +127,38 @@ class GestureDetector:
                 'handedness': handedness_list[i] if i < len(handedness_list) else 'Right'
             })
 
-        # Store centroid history for motion detection
-        centers = [h['centroid'] for h in hands]
-        avg_cx = sum(c[0] for c in centers) / len(centers)
-        avg_cy = sum(c[1] for c in centers) / len(centers)
+        avg_cx = sum(h['centroid'][0] for h in hands) / len(hands)
+        avg_cy = sum(h['centroid'][1] for h in hands) / len(hands)
         now = time.time()
         self.history.append({'time': now, 'cx': avg_cx, 'cy': avg_cy, 'hands': hands})
 
-        # Gesture heuristics
         # Two hands: two fists -> fight mode
         if len(hands) >= 2:
-            fcounts = [h['fingers'] for h in hands]
-            if all(fc == 0 for fc in fcounts):
+            if all(h['fingers'] == 0 for h in hands):
                 return 'fight'
 
         # Single hand gestures
-        if len(hands) >= 1:
+        elif len(hands) >= 1:
             h0 = hands[0]
             
-            # Open palm (4+ fingers) -> follow mode and directional substate
+            # Open palm (4+ fingers) -> check orientation
             if h0['fingers'] >= 4:
-                return self._detect_follow_direction(h0['centroid'])
+                orientation = self._detect_palm_orientation(hand_landmarks_list, 0)
+                if orientation == 'open_palm':
+                    return self._detect_follow_direction(h0['centroid'])
+                elif orientation == 'palm_down':
+                    self.reset_follow_center()
+                    return 'palm_down'
             
-            # Closed fist (0 fingers) -> stop mode
-            if h0['fingers'] == 0:
-                self.follow_center = None
+            # Closed fist (0 fingers)
+            elif h0['fingers'] == 0:
+                self.reset_follow_center()
                 return 'fist'
             
-            # Pointing (1 finger) -> park mode (left or right)
-            pointing = self._detect_pointing(hand_landmarks_list, 0, h0['is_right'])
-            if pointing:
-                return pointing
+            # Pointing (1 finger)
+            else:
+                pointing = self._detect_pointing(hand_landmarks_list, 0, h0['is_right'])
+                if pointing:
+                    return pointing
 
         return None
