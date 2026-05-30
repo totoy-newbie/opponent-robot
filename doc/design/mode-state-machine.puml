@@ -2,7 +2,7 @@
 title opponent robot state machine
 
 ' states
-state Follow 
+state Command 
 state Park 
 state Fight
 state Stop 
@@ -12,18 +12,18 @@ state Stop
 
 Stop -l-> Park : gesture=point_left or point_right
 Stop -r-> Fight : gesture=two_fists
-Stop -d-> Follow : gesture=open_hand
+Stop -d-> Command : gesture=open_hand
 
-Follow --> Park : gesture=point_left or point_right
-Follow --> Fight : gesture=two_fists
-Follow --> Stop : gesture=palm_down
+Command --> Park : gesture=point_left or point_right
+Command --> Fight : gesture=two_fists
+Command --> Stop : gesture=palm_down
 
-Park --> Follow : gesture=open_hand
+Park --> Command : gesture=open_hand
 Park --> Fight : gesture=two_fists
 Park --> Stop : gesture=palm_down
 
 Fight --> Park : gesture=point_left or point_right
-Fight --> Follow : gesture=open_hand
+Fight --> Command : gesture=open_hand
 Fight --> Stop : gesture=palm_down
 
 @enduml

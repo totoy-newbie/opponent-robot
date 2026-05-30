@@ -4,7 +4,8 @@ This module provides `GestureDetector` with a lightweight API:
 - `process(landmarks)` -> returns a detected gesture string or `None`.
 
 Detected gestures:
-- 'follow' (open palm, all fingers extended)
+- 'follow' (open palm at or near the saved center position)
+- 'left', 'right', 'forward', 'back' (open palm moved away from follow center)
 - 'stop' (palm down, fist)
 - 'fight' (two fists)
 - 'park_left' (point left with index finger)
@@ -29,6 +30,8 @@ class GestureDetector:
         """
         self.history = deque(maxlen=max_history)
         self.motion_thresh = motion_thresh
+        self.follow_center = None
+        self.follow_threshold = 0.08
 
     def _count_fingers(self, hand_landmarks_list: List[Any], hand_idx: int, is_right: bool) -> int:
         """Count extended fingers in a hand.
@@ -102,6 +105,27 @@ class GestureDetector:
         else:
             return 'park_right'
 
+    def _detect_follow_direction(self, centroid: tuple) -> str:
+        """Detect follow substate directions relative to the saved palm center."""
+        if self.follow_center is None:
+            self.follow_center = centroid
+            return 'follow'
+
+        dx = centroid[0] - self.follow_center[0]
+        dy = centroid[1] - self.follow_center[1]
+
+        if abs(dx) < self.follow_threshold and abs(dy) < self.follow_threshold:
+            return 'follow'
+
+        if abs(dx) > abs(dy):
+            return 'right' if dx > 0 else 'left'
+        # Reverse vertical mapping: palm down (dy>0) -> 'forward', palm up -> 'back'
+        return 'forward' if dy > 0 else 'back'
+
+    def reset_follow_center(self):
+        """Reset the follow center so the next open palm reinitializes it."""
+        self.follow_center = None
+
     def process(self, hand_landmarks_list: List[Any], handedness_list: List[str]) -> Optional[str]:
         """Process hand landmarks and return a detected gesture.
 
@@ -148,12 +172,13 @@ class GestureDetector:
         if len(hands) >= 1:
             h0 = hands[0]
             
-            # Open palm (4+ fingers) -> follow mode
+            # Open palm (4+ fingers) -> follow mode and directional substate
             if h0['fingers'] >= 4:
-                return 'follow'
+                return self._detect_follow_direction(h0['centroid'])
             
             # Closed fist (0 fingers) -> stop mode
             if h0['fingers'] == 0:
+                self.follow_center = None
                 return 'stop'
             
             # Pointing (1 finger) -> park mode (left or right)

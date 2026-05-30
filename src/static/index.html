@@ -27,7 +27,7 @@
         justify-content: center;
         font-size: 24px;
       }
-      .gesture-box, .mode-box {
+      .gesture-box, .mode-box, .substate-box {
         padding: 15px 30px;
         border: 2px solid #00ff00;
         border-radius: 8px;
@@ -41,10 +41,18 @@
       .mode-box {
         border-color: #ffff00;
       }
+      .substate-box {
+        border-color: #00ffff;
+      }
       .mode-box.active {
         background-color: #1a1a00;
         font-weight: bold;
         color: #ffff00;
+      }
+      .substate-box.active {
+        background-color: #001a1a;
+        font-weight: bold;
+        color: #00ffff;
       }
       .label {
         font-size: 14px;
@@ -65,6 +73,10 @@
       <div class="mode-box">
         <div class="label">Confirmed Mode</div>
         <div id="modeDisplay">-</div>
+      </div>
+      <div class="substate-box">
+        <div class="label">Confirmed Substate</div>
+        <div id="substateDisplay">-</div>
       </div>
     </div>
 
@@ -105,6 +117,8 @@
           const gestureEl = document.getElementById('gestureDisplay');
           const modeEl = document.getElementById('modeDisplay');
           const modeBox = modeEl.parentElement;
+          const substateEl = document.getElementById('substateDisplay');
+          const substateBox = substateEl.parentElement;
 
           if (data.gesture) {
             gestureEl.textContent = data.gesture;
@@ -118,6 +132,14 @@
           } else {
             modeEl.textContent = '-';
             modeBox.classList.remove('active');
+          }
+
+          if (data.substate) {
+            substateEl.textContent = data.substate;
+            substateBox.classList.add('active');
+          } else {
+            substateEl.textContent = '-';
+            substateBox.classList.remove('active');
           }
         } catch (err) {
           console.error('Error fetching gesture:', err);

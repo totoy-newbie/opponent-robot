@@ -1,5 +1,5 @@
 class CommandSubstate:
-    """Follow substate handling directional follow/swap gestures."""
+    """Command substate handling directional command/swap gestures."""
 
     DEFAULT = "Follow"
 

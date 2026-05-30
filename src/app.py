@@ -88,7 +88,7 @@ class OpenCVMediaTrack(VideoStreamTrack):
 
         # Initialize gesture detector and state machine
         self.gesture_detector = GestureDetector()
-        self.state_machine = RobotStateMachine(validation_delay=2.0)
+        self.state_machine = RobotStateMachine(validation_delay=1.5)
 
         if USE_LEGACY_MEDIAPIPE:
             # Legacy MediaPipe solutions API uses the Hands class directly.
@@ -154,13 +154,40 @@ class OpenCVMediaTrack(VideoStreamTrack):
                 for hnd in results.multi_handedness:
                     handedness_labels.append(hnd.classification[0].label)
 
-        # Detect gesture and update state machine
+        # Detect gesture
         gesture = None
         if landmarks:
             gesture = self.gesture_detector.process(landmarks, handedness_labels)
 
-        # Update state machine with detected gesture
+        # Remember previous state so we can react to mode/substate transitions
+        prev_state = self.state_machine.get_state()
+
+        # Update state machine with detected gesture (main-mode detection has precedence)
         state = self.state_machine.update(gesture)
+
+        # If we just entered Command main mode, reset follow center so the next
+        # open-palm detection sets the center at the current palm position.
+        try:
+            prev_main = prev_state.get('main_mode')
+            new_main = state.get('main_mode')
+            prev_sub = prev_state.get('substate')
+            new_sub = state.get('substate')
+        except Exception:
+            prev_main = prev_sub = new_main = new_sub = None
+
+        if prev_main != new_main and new_main == 'Command':
+            # reset so detector will initialize center on first palm
+            self.gesture_detector.reset_follow_center()
+
+        # If we were in a directional follow substate and just returned to the
+        # Follow substate (e.g. halted), reset center so it will be set on next palm
+        directional = ('Left', 'Right', 'Back', 'Forward')
+        if prev_sub in directional and new_sub == 'Follow':
+            self.gesture_detector.reset_follow_center()
+        # If we left Follow mode, clear the center so an open palm in another
+        # mode is recognized as the main 'follow' gesture (not a substate).
+        if prev_main == 'Command' and new_main != 'Command':
+            self.gesture_detector.reset_follow_center()
 
         # draw landmarks and skeleton overlay
         if landmarks:
@@ -186,6 +213,8 @@ class OpenCVMediaTrack(VideoStreamTrack):
 
         if state['main_mode']:
             mode_text = f"Mode: {state['main_mode']}"
+            if state['main_mode'] in ('Park', 'Command') and state.get('substate'):
+                mode_text += f" ({state['substate']})"
             cv2.putText(frame, mode_text, (10, display_y), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 3)
 
         # convert to av.VideoFrame
@@ -255,11 +284,13 @@ def create_app(source=0, model_path=None):
             return web.Response(content_type='application/json', text=json.dumps({
                 'gesture': state['gesture'],
                 'mode': state['main_mode'],
+                'substate': state['substate'],
                 'validation_progress': state['validation_progress']
             }))
         return web.Response(content_type='application/json', text=json.dumps({
             'gesture': None,
             'mode': None,
+            'substate': None,
             'validation_progress': 0
         }))
 
