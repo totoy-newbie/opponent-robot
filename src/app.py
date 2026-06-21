@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import time
+import requests
 from aiohttp import web
 
 import cv2
@@ -79,31 +80,38 @@ class OpenCVMediaTrack(VideoStreamTrack):
     video track for the browser client.
     """
 
-    def __init__(self, source=0, model_path=None, width=640, height=480, fps=20):
+    def __init__(self, source="http://192.168.68.58:8080/video", model_path=None, width=640, height=480, fps=20):
         super().__init__()
-        self.cap = cv2.VideoCapture(source)
-        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
-        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
+        self.source = source
+        self.width = width
+        self.height = height
         self.fps = fps
+
+        self.session = None
+        self.stream = None
+        self.stream_iter = None
+        self.bytes = b""
+
+        self._open_stream()
 
         # Initialize gesture detector and state machine
         self.gesture_detector = GestureDetector()
         self.state_machine = RobotStateMachine(validation_delay=1.5)
 
         if USE_LEGACY_MEDIAPIPE:
-            # Legacy MediaPipe solutions API uses the Hands class directly.
-            self.mp_hands = mp_hands.Hands(static_image_mode=False,
-                                           max_num_hands=2,
-                                           min_detection_confidence=0.5,
-                                           min_tracking_confidence=0.5)
+            self.mp_hands = mp_hands.Hands(
+                static_image_mode=False,
+                max_num_hands=2,
+                min_detection_confidence=0.5,
+                min_tracking_confidence=0.5
+            )
             self.use_tasks = False
         else:
-            # For MediaPipe Tasks API, load the hand_landmarker.task model bundle.
             model_path = model_path or os.getenv(MODEL_ENV_NAME) or DEFAULT_TASK_MODEL
             if not model_path or not os.path.isfile(model_path):
                 raise FileNotFoundError(
                     'MediaPipe 0.10+ requires a hand landmarker task bundle. '
-                    'Download or provide hand_landmarker.task and pass --model <path> ' \
+                    'Download or provide hand_landmarker.task and pass --model <path> '
                     f'or set {MODEL_ENV_NAME}.'
                 )
 
@@ -118,14 +126,82 @@ class OpenCVMediaTrack(VideoStreamTrack):
             self.mp_hands = HandLandmarker.create_from_options(options)
             self.use_tasks = True
 
+    def _close_stream(self):
+        if self.stream is not None:
+            try:
+                self.stream.close()
+            except Exception:
+                pass
+            self.stream = None
+        if self.session is not None:
+            try:
+                self.session.close()
+            except Exception:
+                pass
+            self.session = None
+
+    def _open_stream(self):
+        self._close_stream()
+        self.session = requests.Session()
+        self.stream = self.session.get(
+            self.source,
+            stream=True,
+            timeout=(5, 15),
+            headers={
+                'Cache-Control': 'no-cache',
+                'Pragma': 'no-cache',
+                'User-Agent': 'OpponentRobot/1.0'
+            }
+        )
+        if self.stream.status_code != 200:
+            raise RuntimeError("Cannot open IP camera stream")
+        self.stream_iter = self.stream.iter_content(chunk_size=4096)
+
+    def _reopen_stream(self):
+        logging.warning("Reopening MJPEG stream: %s", self.source)
+        try:
+            self._open_stream()
+        except Exception as exc:
+            logging.warning("Failed to reopen MJPEG stream: %s", exc)
+            time.sleep(1)
+            self._open_stream()
+
+    def read(self):
+        while True:
+            try:
+                for chunk in self.stream_iter:
+                    if not chunk:
+                        continue
+                    self.bytes += chunk
+                    a = self.bytes.find(b'\xff\xd8')
+                    if a == -1:
+                        continue
+                    b = self.bytes.find(b'\xff\xd9', a + 2)
+                    if b == -1:
+                        continue
+                    jpg = self.bytes[a:b+2]
+                    self.bytes = self.bytes[b+2:]
+                    img = cv2.imdecode(np.frombuffer(jpg, dtype=np.uint8), cv2.IMREAD_COLOR)
+                    if img is not None:
+                        img = cv2.resize(img, (self.width, self.height))
+                        return True, img
+                logging.warning("MJPEG stream ended unexpectedly, reconnecting...")
+            except Exception as exc:
+                logging.warning("MJPEG read error: %s", exc)
+            self._reopen_stream()
+
     async def recv(self):
         pts, time_base = await self.next_timestamp()
 
         loop = asyncio.get_event_loop()
-        ret, frame = await loop.run_in_executor(None, self.cap.read)
+        ret, frame = await loop.run_in_executor(None, self.read)
+
         if not ret:
             # return a black frame if capture failed
             frame = np.zeros((480, 640, 3), dtype=np.uint8)
+
+        # rotate 90 degrees left (counter-clockwise)
+        frame = cv2.rotate(frame, cv2.ROTATE_90_COUNTERCLOCKWISE)
 
         # mirror the camera feed so it behaves like a front-facing webcam
         frame = cv2.flip(frame, 1)
@@ -240,7 +316,8 @@ async def on_shutdown(app):
 def create_app(source=0, model_path=None):
     # Create the aiohttp application and define the WebRTC signaling endpoint.
     app = web.Application()
-    app.router.add_get('/', lambda r: web.FileResponse('./src/static/index.html'))
+    root_dir = os.path.dirname(__file__)
+    app.router.add_get('/', lambda r: web.FileResponse(os.path.join(root_dir, 'static', 'index.html')))
 
     async def offer(request):
         # Handle browser WebRTC offers. This endpoint receives SDP from the client,
@@ -301,14 +378,23 @@ def create_app(source=0, model_path=None):
 
 if __name__ == '__main__':
     # Parse CLI arguments and start the aiohttp server.
-    # Use --source to select the camera index and --model to provide a MediaPipe task bundle.
     parser = argparse.ArgumentParser(description='Run WebRTC OpenCV/MediaPipe server')
     parser.add_argument('--host', default='0.0.0.0')
-    parser.add_argument('--port', default=8080, type=int)
-    parser.add_argument('--source', default=0, type=int)
+    parser.add_argument('--port', default=8081, type=int)
+    parser.add_argument(
+        '--source',
+        default="0",
+        type=str,
+        help='Camera index (e.g. 0) or HTTP URL (e.g. http://192.168.x.x:8080/video)'
+    )
     parser.add_argument('--model', default=None,
                         help='Path to hand_landmarker.task for MediaPipe 0.10+ installs')
     args = parser.parse_args()
 
-    app = create_app(source=args.source, model_path=args.model)
+    # Convert numeric strings to int for webcam indices
+    source_arg = args.source
+    if source_arg.isdigit():
+        source_arg = int(source_arg)
+
+    app = create_app(source=source_arg, model_path=args.model)
     web.run_app(app, host=args.host, port=args.port)
